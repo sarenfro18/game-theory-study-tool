@@ -22,53 +22,9 @@ export function PayoffCell({
   return (
     <div
       className={`relative w-24 h-24 transition-all duration-200 ${
-        isEliminated ? "bg-gray-100" : "bg-white"
+        isEliminated ? "bg-gray-100 opacity-30" : "bg-white"
       }`}
     >
-      {/* Diagonal line from top-right to bottom-left */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-      >
-        <line
-          x1="100"
-          y1="0"
-          x2="0"
-          y2="100"
-          stroke={isEliminated ? "#d1d5db" : "#e5e7eb"}
-          strokeWidth="1"
-        />
-      </svg>
-
-      {/* Strikethrough X for eliminated cells */}
-      {isEliminated && (
-        <svg
-          className="absolute inset-0 w-full h-full pointer-events-none z-20"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-        >
-          <line
-            x1="15"
-            y1="15"
-            x2="85"
-            y2="85"
-            stroke="#9ca3af"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          <line
-            x1="85"
-            y1="15"
-            x2="15"
-            y2="85"
-            stroke="#9ca3af"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
-      )}
-
       {/* Player B payoff (top-right) */}
       <button
         onClick={() => onCirclePayoff(coord, "B")}
@@ -84,6 +40,11 @@ export function PayoffCell({
       >
         {payoffs.b}
       </button>
+
+      {/* Comma separator */}
+      <span className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none ${isEliminated ? "opacity-50" : ""}`}>
+        ,
+      </span>
 
       {/* Player A payoff (bottom-left) */}
       <button

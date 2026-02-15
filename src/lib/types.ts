@@ -92,12 +92,14 @@ export type QuestionCategory =
   | "find_dominated_strategies"
   | "ieds_survivors"
   | "nash_equilibrium"
+  | "select_all_nash"
   | "residual_game"
   | "count_nash"
   | "willingness_to_pay"
   | "true_false"
   | "sequential_first_mover"
   | "sequential_second_mover"
+  | "sequential_best_response"
   | "consulting_offer";
 
 export interface Question {
@@ -107,7 +109,22 @@ export interface Question {
   text: string;
   options: string[];
   correctIndex: number;
+  /** For multi-select questions, all correct indices */
+  correctIndices?: number[];
+  /** Whether this question uses multi-select (checkboxes) */
+  multiSelect?: boolean;
   explanation: string;
+}
+
+export interface TreeHighlightedEdge {
+  parentId: string;
+  edgeLabel: string;
+}
+
+export interface TreeState {
+  highlightedEdges: TreeHighlightedEdge[];
+  /** Map from leafId to student-assigned payoffs */
+  leafPayoffs: Record<string, Payoffs>;
 }
 
 export interface GameState {
@@ -116,7 +133,9 @@ export interface GameState {
   sequentialGame: SequentialGame | null;
   question: Question;
   elimination: EliminationState;
+  treeState: TreeState;
   selectedAnswer: number | null;
+  selectedAnswers: number[];
   isSubmitted: boolean;
   isCorrect: boolean | null;
   score: { correct: number; total: number };
@@ -126,8 +145,13 @@ export type GameAction =
   | { type: "NEW_GAME" }
   | { type: "SET_DIFFICULTY"; difficulty: Difficulty }
   | { type: "SELECT_ANSWER"; index: number }
+  | { type: "TOGGLE_ANSWER"; index: number }
   | { type: "SUBMIT_ANSWER" }
   | { type: "TOGGLE_ELIMINATE_ROW"; row: number }
   | { type: "TOGGLE_ELIMINATE_COL"; col: number }
   | { type: "TOGGLE_CIRCLE_PAYOFF"; coord: CellCoord; player: PlayerLabel }
-  | { type: "RESET_MARKINGS" };
+  | { type: "RESET_MARKINGS" }
+  | { type: "TOGGLE_TREE_EDGE"; parentId: string; edgeLabel: string }
+  | { type: "ASSIGN_LEAF_PAYOFF"; leafId: string; payoffs: Payoffs }
+  | { type: "CLEAR_LEAF_PAYOFF"; leafId: string }
+  | { type: "RESET_TREE" };

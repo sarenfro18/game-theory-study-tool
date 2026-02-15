@@ -21,6 +21,7 @@ const EASY_CATEGORIES: QuestionCategory[] = [
 
 const MEDIUM_CATEGORIES: QuestionCategory[] = [
   ...EASY_CATEGORIES,
+  "select_all_nash",
   "true_false",
   "willingness_to_pay",
 ];
@@ -28,6 +29,7 @@ const MEDIUM_CATEGORIES: QuestionCategory[] = [
 const HARD_CATEGORIES: QuestionCategory[] = [
   "sequential_first_mover",
   "sequential_second_mover",
+  "sequential_best_response",
   "consulting_offer",
 ];
 
@@ -60,6 +62,8 @@ function generateQuestionForCategory(
       return generateIEDSQuestion(matrix, difficulty);
     case "nash_equilibrium":
       return generateNashQuestion(matrix, difficulty);
+    case "select_all_nash":
+      return generateSelectAllNashQuestion(matrix, difficulty);
     case "residual_game":
       return generateResidualGameQuestion(matrix, difficulty);
     case "count_nash":
@@ -72,6 +76,8 @@ function generateQuestionForCategory(
       return generateSequentialFirstMoverQuestion(matrix, difficulty, sequentialGame);
     case "sequential_second_mover":
       return generateSequentialSecondMoverQuestion(matrix, difficulty, sequentialGame);
+    case "sequential_best_response":
+      return generateSequentialBestResponseQuestion(matrix, difficulty, sequentialGame);
     case "consulting_offer":
       return generateConsultingOfferQuestion(matrix, difficulty, sequentialGame);
     default:
@@ -291,6 +297,49 @@ function generateCountNashQuestion(
     options,
     correctIndex: options.indexOf(correctAnswer),
     explanation: `There ${count === 1 ? "is" : "are"} ${count} pure-strategy Nash ${count === 1 ? "Equilibrium" : "Equilibria"}.\n\n${explanation}`,
+  };
+}
+
+function generateSelectAllNashQuestion(
+  matrix: PayoffMatrix,
+  difficulty: Difficulty
+): Question {
+  const nash = findNashEquilibria(matrix);
+
+  // Build all cell options
+  const allCellOptions: string[] = [];
+  for (let r = 0; r < matrix.rows; r++) {
+    for (let c = 0; c < matrix.cols; c++) {
+      allCellOptions.push(`(${matrix.rowLabels[r]}, ${matrix.colLabels[c]})`);
+    }
+  }
+
+  // Add "No Nash Equilibrium exists" as the last option
+  const options = [...allCellOptions, "No Nash Equilibrium exists"];
+
+  // Find correct indices
+  let correctIndices: number[];
+  if (nash.length === 0) {
+    correctIndices = [options.length - 1]; // "No Nash Equilibrium exists"
+  } else {
+    correctIndices = nash.map((ne) => {
+      const label = `(${ne.rowLabel}, ${ne.colLabel})`;
+      return options.indexOf(label);
+    });
+  }
+
+  const explanation = buildNashExplanation(matrix, nash);
+
+  return {
+    id: generateId(),
+    category: "select_all_nash",
+    difficulty,
+    text: "Select ALL outcomes that are Nash Equilibria in this game.",
+    options,
+    correctIndex: correctIndices[0],
+    correctIndices,
+    multiSelect: true,
+    explanation,
   };
 }
 
@@ -593,6 +642,50 @@ function generateSequentialSecondMoverQuestion(
     category: "sequential_second_mover",
     difficulty,
     text: "What will be the outcome if Player B has the head start and can make the first move? Use backward induction.",
+    options,
+    correctIndex: options.indexOf(correctAnswer),
+    explanation,
+  };
+}
+
+function generateSequentialBestResponseQuestion(
+  matrix: PayoffMatrix,
+  difficulty: Difficulty,
+  sequentialGame?: SequentialGame
+): Question {
+  // Randomly pick which player we ask about and who moves first
+  const askAbout: "A" | "B" = Math.random() < 0.5 ? "A" : "B";
+  const firstMover: "A" | "B" = askAbout === "A" ? "B" : "A";
+
+  // Build a game where the OTHER player moves first
+  const game =
+    sequentialGame && sequentialGame.firstMover === firstMover
+      ? sequentialGame
+      : buildSequentialGame(matrix, firstMover);
+
+  // The backward induction path tells us what happens:
+  // path[0] = first mover's choice, path[1] = second mover's (askAbout's) best response
+  const bestResponseLabel = game.backwardInductionPath[1];
+  const correctAnswer = bestResponseLabel;
+
+  // Distractors: other strategies for the asked-about player
+  const askAboutStrategies = askAbout === "A" ? matrix.rowLabels : matrix.colLabels;
+  const distractors = askAboutStrategies.filter((s) => s !== correctAnswer);
+
+  // Build options
+  const shuffled = shuffle(distractors);
+  const options = shuffle([correctAnswer, ...shuffled.slice(0, 3)]);
+  if (options.length < 4) {
+    options.push("None of the Above");
+  }
+
+  const explanation = buildBackwardInductionExplanation(matrix, game);
+
+  return {
+    id: generateId(),
+    category: "sequential_best_response",
+    difficulty,
+    text: `If Player ${firstMover} moves first, what move should Player ${askAbout} make in response using backward induction?`,
     options,
     correctIndex: options.indexOf(correctAnswer),
     explanation,

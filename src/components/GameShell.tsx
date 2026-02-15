@@ -12,17 +12,14 @@ import { DecisionTree } from "./DecisionTree";
 const DIFFICULTY_INFO = {
   easy: {
     label: "Simultaneous Game",
-    description: "2x2 payoff matrix — find dominated strategies, Nash equilibria, and IEDS outcomes.",
     color: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
   medium: {
     label: "Simultaneous Game",
-    description: "2x2 or 3x3 payoff matrix — includes willingness-to-pay and true/false questions.",
     color: "bg-amber-50 text-amber-700 border-amber-200",
   },
   hard: {
     label: "Sequential Game",
-    description: "Payoff matrix with decision tree — backward induction and first-mover analysis.",
     color: "bg-rose-50 text-rose-700 border-rose-200",
   },
 } as const;
@@ -31,12 +28,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   find_dominated_strategies: "Dominated Strategies",
   ieds_survivors: "IEDS",
   nash_equilibrium: "Nash Equilibrium",
+  select_all_nash: "Nash Equilibrium",
   residual_game: "Residual Game",
   count_nash: "Nash Equilibrium",
   true_false: "True / False",
   willingness_to_pay: "Willingness to Pay",
   sequential_first_mover: "Sequential Game",
   sequential_second_mover: "Sequential Game",
+  sequential_best_response: "Best Response",
   consulting_offer: "Consulting Offer",
 };
 
@@ -46,11 +45,16 @@ export function GameShell() {
     newGame,
     setDifficulty,
     selectAnswer,
+    toggleAnswer,
     submitAnswer,
     toggleRow,
     toggleCol,
     toggleCircle,
     resetMarkings,
+    toggleTreeEdge,
+    assignLeafPayoff,
+    clearLeafPayoff,
+    resetTree,
   } = useGameState();
 
   const [glossaryOpen, setGlossaryOpen] = useState(false);
@@ -73,11 +77,7 @@ export function GameShell() {
         <div
           className={`mb-6 px-4 py-3 rounded-lg border text-sm flex items-center justify-between ${diffInfo.color}`}
         >
-          <div>
-            <span className="font-semibold">{diffInfo.label}</span>
-            <span className="mx-2">—</span>
-            <span className="opacity-80">{diffInfo.description}</span>
-          </div>
+          <span className="font-semibold">{diffInfo.label}</span>
           <span className="text-xs font-mono opacity-60">
             {state.matrix.rows}x{state.matrix.cols}
           </span>
@@ -105,6 +105,13 @@ export function GameShell() {
               <DecisionTree
                 game={state.sequentialGame}
                 showSolution={state.isSubmitted}
+                highlightedEdges={state.treeState.highlightedEdges}
+                leafPayoffs={state.treeState.leafPayoffs}
+                matrix={state.matrix}
+                onToggleEdge={toggleTreeEdge}
+                onAssignLeaf={assignLeafPayoff}
+                onClearLeaf={clearLeafPayoff}
+                onResetTree={resetTree}
               />
             )}
           </div>
@@ -124,9 +131,11 @@ export function GameShell() {
             <QuestionPanel
               question={state.question}
               selectedAnswer={state.selectedAnswer}
+              selectedAnswers={state.selectedAnswers}
               isSubmitted={state.isSubmitted}
               isCorrect={state.isCorrect}
               onSelectAnswer={selectAnswer}
+              onToggleAnswer={toggleAnswer}
               onSubmit={submitAnswer}
             />
 

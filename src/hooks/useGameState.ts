@@ -7,7 +7,9 @@ import {
   EliminationState,
   GameAction,
   GameState,
+  Payoffs,
   PlayerLabel,
+  TreeState,
 } from "@/lib/types";
 import { generateMatrix, getMatrixSize } from "@/lib/matrix";
 import { generateQuestion } from "@/lib/questions";
@@ -18,6 +20,13 @@ function createFreshElimination(): EliminationState {
     eliminatedRows: [],
     eliminatedCols: [],
     circledPayoffs: [],
+  };
+}
+
+function createFreshTreeState(): TreeState {
+  return {
+    highlightedEdges: [],
+    leafPayoffs: {},
   };
 }
 
@@ -40,7 +49,9 @@ function createNewGame(difficulty: Difficulty): Omit<GameState, "score"> {
     sequentialGame,
     question,
     elimination: createFreshElimination(),
+    treeState: createFreshTreeState(),
     selectedAnswer: null,
+    selectedAnswers: [],
     isSubmitted: false,
     isCorrect: null,
   };
@@ -80,8 +91,44 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case "TOGGLE_ANSWER": {
+      if (state.isSubmitted) return state;
+      const already = state.selectedAnswers.includes(action.index);
+      const newSelected = already
+        ? state.selectedAnswers.filter((i) => i !== action.index)
+        : [...state.selectedAnswers, action.index];
+      return {
+        ...state,
+        selectedAnswers: newSelected,
+        // Keep selectedAnswer in sync for backward compatibility
+        selectedAnswer: newSelected.length > 0 ? newSelected[0] : null,
+      };
+    }
+
     case "SUBMIT_ANSWER": {
-      if (state.selectedAnswer === null || state.isSubmitted) return state;
+      if (state.isSubmitted) return state;
+
+      // Multi-select question
+      if (state.question.multiSelect && state.question.correctIndices) {
+        if (state.selectedAnswers.length === 0) return state;
+        const correctSet = new Set(state.question.correctIndices);
+        const selectedSet = new Set(state.selectedAnswers);
+        const isCorrect =
+          correctSet.size === selectedSet.size &&
+          [...correctSet].every((i) => selectedSet.has(i));
+        return {
+          ...state,
+          isSubmitted: true,
+          isCorrect,
+          score: {
+            correct: state.score.correct + (isCorrect ? 1 : 0),
+            total: state.score.total + 1,
+          },
+        };
+      }
+
+      // Single-select question
+      if (state.selectedAnswer === null) return state;
       const isCorrect = state.selectedAnswer === state.question.correctIndex;
       return {
         ...state,
@@ -141,6 +188,52 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case "TOGGLE_TREE_EDGE": {
+      const existing = state.treeState.highlightedEdges.findIndex(
+        (e) => e.parentId === action.parentId && e.edgeLabel === action.edgeLabel
+      );
+      const highlighted =
+        existing >= 0
+          ? state.treeState.highlightedEdges.filter((_, i) => i !== existing)
+          : [...state.treeState.highlightedEdges, { parentId: action.parentId, edgeLabel: action.edgeLabel }];
+      return {
+        ...state,
+        treeState: { ...state.treeState, highlightedEdges: highlighted },
+      };
+    }
+
+    case "ASSIGN_LEAF_PAYOFF": {
+      return {
+        ...state,
+        treeState: {
+          ...state.treeState,
+          leafPayoffs: {
+            ...state.treeState.leafPayoffs,
+            [action.leafId]: action.payoffs,
+          },
+        },
+      };
+    }
+
+    case "CLEAR_LEAF_PAYOFF": {
+      const { [action.leafId]: _, ...rest } = state.treeState.leafPayoffs;
+      void _;
+      return {
+        ...state,
+        treeState: {
+          ...state.treeState,
+          leafPayoffs: rest,
+        },
+      };
+    }
+
+    case "RESET_TREE": {
+      return {
+        ...state,
+        treeState: createFreshTreeState(),
+      };
+    }
+
     default:
       return state;
   }
@@ -156,6 +249,10 @@ export function useGameState() {
   );
   const selectAnswer = useCallback(
     (index: number) => dispatch({ type: "SELECT_ANSWER", index }),
+    []
+  );
+  const toggleAnswer = useCallback(
+    (index: number) => dispatch({ type: "TOGGLE_ANSWER", index }),
     []
   );
   const submitAnswer = useCallback(
@@ -179,16 +276,39 @@ export function useGameState() {
     () => dispatch({ type: "RESET_MARKINGS" }),
     []
   );
+  const toggleTreeEdge = useCallback(
+    (parentId: string, edgeLabel: string) =>
+      dispatch({ type: "TOGGLE_TREE_EDGE", parentId, edgeLabel }),
+    []
+  );
+  const assignLeafPayoff = useCallback(
+    (leafId: string, payoffs: Payoffs) =>
+      dispatch({ type: "ASSIGN_LEAF_PAYOFF", leafId, payoffs }),
+    []
+  );
+  const clearLeafPayoff = useCallback(
+    (leafId: string) => dispatch({ type: "CLEAR_LEAF_PAYOFF", leafId }),
+    []
+  );
+  const resetTree = useCallback(
+    () => dispatch({ type: "RESET_TREE" }),
+    []
+  );
 
   return {
     state,
     newGame,
     setDifficulty,
     selectAnswer,
+    toggleAnswer,
     submitAnswer,
     toggleRow,
     toggleCol,
     toggleCircle,
     resetMarkings,
+    toggleTreeEdge,
+    assignLeafPayoff,
+    clearLeafPayoff,
+    resetTree,
   };
 }

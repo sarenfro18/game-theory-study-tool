@@ -1,10 +1,25 @@
 "use client";
 
-import { DecisionNode, LeafNode, SequentialGame } from "@/lib/types";
+import { useState } from "react";
+import {
+  DecisionNode,
+  LeafNode,
+  Payoffs,
+  PayoffMatrix,
+  SequentialGame,
+  TreeHighlightedEdge,
+} from "@/lib/types";
 
 interface DecisionTreeProps {
   game: SequentialGame;
   showSolution: boolean;
+  highlightedEdges: TreeHighlightedEdge[];
+  leafPayoffs: Record<string, Payoffs>;
+  matrix: PayoffMatrix;
+  onToggleEdge: (parentId: string, edgeLabel: string) => void;
+  onAssignLeaf: (leafId: string, payoffs: Payoffs) => void;
+  onClearLeaf: (leafId: string) => void;
+  onResetTree: () => void;
 }
 
 // Layout constants
@@ -53,7 +68,6 @@ function layoutTree(
     return { edge: { label: edge.label }, child: childLayout };
   });
 
-  // Parent x is the average of its children's x
   const avgX =
     children.reduce((sum, c) => sum + c.child.x, 0) / children.length;
 
@@ -73,13 +87,29 @@ function getLeafCount(node: DecisionNode | LeafNode): number {
   );
 }
 
-export function DecisionTree({ game, showSolution }: DecisionTreeProps) {
+function getNodeId(node: DecisionNode | LeafNode): string {
+  if (isLeaf(node)) return node.id;
+  return (node as DecisionNode).id;
+}
+
+export function DecisionTree({
+  game,
+  showSolution,
+  highlightedEdges,
+  leafPayoffs,
+  matrix,
+  onToggleEdge,
+  onAssignLeaf,
+  onClearLeaf,
+  onResetTree,
+}: DecisionTreeProps) {
+  const [selectedLeaf, setSelectedLeaf] = useState<string | null>(null);
+
   const leafCount = getLeafCount(game.tree);
   const leafSpacing = leafCount <= 4 ? 100 : 75;
   const totalWidth = Math.max(400, leafCount * leafSpacing + 60);
   const totalHeight = TOP_PADDING + 2 * LEVEL_HEIGHT + BOTTOM_PADDING;
 
-  // Calculate evenly spaced leaf positions
   const startX = (totalWidth - (leafCount - 1) * leafSpacing) / 2;
   const leafPositions = Array.from(
     { length: leafCount },
@@ -88,19 +118,40 @@ export function DecisionTree({ game, showSolution }: DecisionTreeProps) {
 
   const root = layoutTree(game.tree, 0, leafPositions, { current: 0 });
 
-  // Check if an edge is on the backward induction path
-  const isOnPath = (parentLabel: string, edgeLabel: string, depth: number): boolean => {
+  // Check if an edge is on the backward induction path (shown after submission)
+  const isOnSolutionPath = (parentLabel: string, edgeLabel: string, depth: number): boolean => {
     if (!showSolution) return false;
     if (depth === 0) {
       return game.backwardInductionPath[0] === edgeLabel;
     }
     if (depth === 1) {
-      // Need to check if the parent edge matches path[0] and this edge matches path[1]
       return game.backwardInductionPath[1] === edgeLabel &&
         game.backwardInductionPath[0] === parentLabel;
     }
     return false;
   };
+
+  // Check if an edge is highlighted by the student
+  const isHighlighted = (parentId: string, edgeLabel: string): boolean => {
+    return highlightedEdges.some(
+      (e) => e.parentId === parentId && e.edgeLabel === edgeLabel
+    );
+  };
+
+  // Count how many leaves have been populated
+  const populatedCount = Object.keys(leafPayoffs).length;
+  const allPopulated = populatedCount === leafCount;
+
+  // Build cell options for the leaf assignment picker
+  const cellOptions: { label: string; payoffs: Payoffs }[] = [];
+  for (let r = 0; r < matrix.rows; r++) {
+    for (let c = 0; c < matrix.cols; c++) {
+      cellOptions.push({
+        label: `(${matrix.rowLabels[r]}, ${matrix.colLabels[c]})`,
+        payoffs: matrix.cells[r][c],
+      });
+    }
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 w-full">
@@ -110,6 +161,14 @@ export function DecisionTree({ game, showSolution }: DecisionTreeProps) {
           (Player {game.firstMover} moves first)
         </span>
       </h2>
+
+      {/* Instructions */}
+      {!showSolution && (
+        <p className="text-xs text-gray-400 text-center mb-2">
+          Click edges to highlight your predicted path. Click leaf nodes to assign payoffs from the matrix.
+        </p>
+      )}
+
       <div className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${totalWidth} ${totalHeight}`}
@@ -117,21 +176,99 @@ export function DecisionTree({ game, showSolution }: DecisionTreeProps) {
           style={{ maxWidth: `${totalWidth}px`, width: "100%" }}
         >
           {/* Render edges first (behind nodes) */}
-          {renderEdges(root, "", 0, isOnPath)}
+          {renderEdges(root, "", 0, isOnSolutionPath, isHighlighted, onToggleEdge)}
 
           {/* Render nodes on top */}
-          {renderNodes(root, showSolution, game)}
+          {renderNodes(root, showSolution, game, leafPayoffs, selectedLeaf, setSelectedLeaf)}
         </svg>
       </div>
 
-      {showSolution && (
-        <div className="flex items-center justify-center gap-4 mt-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-6 h-0.5 bg-indigo-500 rounded" />
-            Backward induction path
-          </span>
+      {/* Leaf assignment popup */}
+      {selectedLeaf && !showSolution && (
+        <div className="mt-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+          <p className="text-xs font-semibold text-indigo-700 mb-2">
+            Assign payoffs to this leaf:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {cellOptions.map((cell) => {
+              const alreadyUsed = Object.entries(leafPayoffs).some(
+                ([lid, p]) =>
+                  lid !== selectedLeaf &&
+                  p.a === cell.payoffs.a &&
+                  p.b === cell.payoffs.b
+              );
+              return (
+                <button
+                  key={cell.label}
+                  onClick={() => {
+                    onAssignLeaf(selectedLeaf, cell.payoffs);
+                    setSelectedLeaf(null);
+                  }}
+                  disabled={alreadyUsed}
+                  className={`px-2 py-1 rounded text-xs font-mono border transition-all ${
+                    alreadyUsed
+                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer"
+                  }`}
+                >
+                  <span className="text-blue-600">{cell.payoffs.a}</span>
+                  <span className="text-gray-400">,</span>
+                  <span className="text-red-600">{cell.payoffs.b}</span>
+                </button>
+              );
+            })}
+            {leafPayoffs[selectedLeaf] && (
+              <button
+                onClick={() => {
+                  onClearLeaf(selectedLeaf);
+                  setSelectedLeaf(null);
+                }}
+                className="px-2 py-1 rounded text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedLeaf(null)}
+              className="px-2 py-1 rounded text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Status / Legend bar */}
+      <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+        <div className="flex items-center gap-4">
+          {showSolution && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-6 h-0.5 bg-indigo-500 rounded" />
+              Solution path
+            </span>
+          )}
+          {highlightedEdges.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-6 h-0.5 bg-emerald-500 rounded" />
+              Your path
+            </span>
+          )}
+          {!showSolution && (
+            <span>
+              Leaves filled: {populatedCount}/{leafCount}
+              {allPopulated && " \u2713"}
+            </span>
+          )}
+        </div>
+        {!showSolution && (
+          <button
+            onClick={onResetTree}
+            className="text-indigo-600 hover:text-indigo-800 font-medium underline"
+          >
+            Reset tree
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -140,14 +277,21 @@ function renderEdges(
   layout: LayoutNode,
   parentEdgeLabel: string,
   depth: number,
-  isOnPath: (parentLabel: string, edgeLabel: string, depth: number) => boolean
+  isOnSolutionPath: (parentLabel: string, edgeLabel: string, depth: number) => boolean,
+  isHighlighted: (parentId: string, edgeLabel: string) => boolean,
+  onToggleEdge: (parentId: string, edgeLabel: string) => void
 ): React.ReactNode[] {
   const elements: React.ReactNode[] = [];
+  const parentId = getNodeId(layout.node);
 
   for (const { edge, child } of layout.children) {
-    const onPath = isOnPath(parentEdgeLabel, edge.label, depth);
+    const onPath = isOnSolutionPath(parentEdgeLabel, edge.label, depth);
+    const highlighted = isHighlighted(parentId, edge.label);
 
-    // Edge line
+    const strokeColor = onPath ? "#6366f1" : highlighted ? "#10b981" : "#d1d5db";
+    const strokeW = onPath ? 3 : highlighted ? 2.5 : 1.5;
+
+    // Edge line (clickable)
     elements.push(
       <line
         key={`edge-${layout.x}-${layout.y}-${child.x}-${child.y}`}
@@ -155,19 +299,40 @@ function renderEdges(
         y1={layout.y + NODE_RADIUS}
         x2={child.x}
         y2={child.y - (isLeaf(child.node) ? LEAF_RY : NODE_RADIUS)}
-        stroke={onPath ? "#6366f1" : "#d1d5db"}
-        strokeWidth={onPath ? 3 : 1.5}
+        stroke={strokeColor}
+        strokeWidth={strokeW}
         strokeLinecap="round"
+        className="cursor-pointer"
+        onClick={() => onToggleEdge(parentId, edge.label)}
       />
     );
 
-    // Edge label (strategy name)
+    // Invisible wider hit area for easier clicking
+    elements.push(
+      <line
+        key={`edge-hit-${layout.x}-${layout.y}-${child.x}-${child.y}`}
+        x1={layout.x}
+        y1={layout.y + NODE_RADIUS}
+        x2={child.x}
+        y2={child.y - (isLeaf(child.node) ? LEAF_RY : NODE_RADIUS)}
+        stroke="transparent"
+        strokeWidth="12"
+        className="cursor-pointer"
+        onClick={() => onToggleEdge(parentId, edge.label)}
+      />
+    );
+
+    // Edge label
     const midX = (layout.x + child.x) / 2;
     const midY = (layout.y + child.y) / 2;
     const offsetX = child.x > layout.x ? -12 : child.x < layout.x ? 12 : 0;
 
     elements.push(
-      <g key={`elabel-${layout.x}-${child.x}-${edge.label}`}>
+      <g
+        key={`elabel-${layout.x}-${child.x}-${edge.label}`}
+        className="cursor-pointer"
+        onClick={() => onToggleEdge(parentId, edge.label)}
+      >
         <rect
           x={midX + offsetX - 20}
           y={midY - 10}
@@ -175,7 +340,7 @@ function renderEdges(
           height="18"
           rx="4"
           fill="white"
-          stroke={onPath ? "#6366f1" : "#e5e7eb"}
+          stroke={onPath ? "#6366f1" : highlighted ? "#10b981" : "#e5e7eb"}
           strokeWidth="1"
         />
         <text
@@ -183,16 +348,16 @@ function renderEdges(
           y={midY + 2}
           textAnchor="middle"
           className="text-[11px] font-medium"
-          fill={onPath ? "#4f46e5" : "#6b7280"}
+          fill={onPath ? "#4f46e5" : highlighted ? "#059669" : "#6b7280"}
         >
           {edge.label}
         </text>
       </g>
     );
 
-    // Recurse into children
+    // Recurse
     elements.push(
-      ...renderEdges(child, edge.label, depth + 1, isOnPath)
+      ...renderEdges(child, edge.label, depth + 1, isOnSolutionPath, isHighlighted, onToggleEdge)
     );
   }
 
@@ -202,7 +367,10 @@ function renderEdges(
 function renderNodes(
   layout: LayoutNode,
   showSolution: boolean,
-  game: SequentialGame
+  game: SequentialGame,
+  leafPayoffs: Record<string, Payoffs>,
+  selectedLeaf: string | null,
+  setSelectedLeaf: (id: string | null) => void
 ): React.ReactNode[] {
   const elements: React.ReactNode[] = [];
 
@@ -212,56 +380,117 @@ function renderNodes(
       showSolution &&
       leaf.id === `leaf-${game.backwardInductionOutcome.row}-${game.backwardInductionOutcome.col}`;
 
-    // Leaf node: rounded rectangle with payoffs
+    // Check if student has populated this leaf
+    const studentPayoffs = leafPayoffs[leaf.id];
+    const isSelected = selectedLeaf === leaf.id;
+    const hasPayoffs = showSolution || !!studentPayoffs;
+
+    const displayPayoffs = showSolution ? leaf.payoffs : studentPayoffs;
+
+    // Check if student assignment matches the actual payoffs
+    const isCorrectAssignment =
+      showSolution &&
+      studentPayoffs &&
+      studentPayoffs.a === leaf.payoffs.a &&
+      studentPayoffs.b === leaf.payoffs.b;
+    const isWrongAssignment =
+      showSolution &&
+      studentPayoffs &&
+      (studentPayoffs.a !== leaf.payoffs.a || studentPayoffs.b !== leaf.payoffs.b);
+
+    let fillColor = "white";
+    let strokeColor = "#d1d5db";
+    let strokeW = 1.5;
+
+    if (isOutcome) {
+      fillColor = "#eef2ff";
+      strokeColor = "#6366f1";
+      strokeW = 2.5;
+    } else if (isSelected) {
+      fillColor = "#f0fdf4";
+      strokeColor = "#10b981";
+      strokeW = 2;
+    } else if (isCorrectAssignment) {
+      fillColor = "#f0fdf4";
+      strokeColor = "#22c55e";
+      strokeW = 2;
+    } else if (isWrongAssignment) {
+      fillColor = "#fef2f2";
+      strokeColor = "#ef4444";
+      strokeW = 2;
+    } else if (studentPayoffs && !showSolution) {
+      fillColor = "#f0fdf4";
+      strokeColor = "#86efac";
+      strokeW = 1.5;
+    }
+
     elements.push(
-      <g key={`leaf-${layout.x}-${layout.y}`}>
+      <g
+        key={`leaf-${layout.x}-${layout.y}`}
+        className={showSolution ? undefined : "cursor-pointer"}
+        onClick={() => {
+          if (!showSolution) {
+            setSelectedLeaf(isSelected ? null : leaf.id);
+          }
+        }}
+      >
         <rect
           x={layout.x - LEAF_RX}
           y={layout.y - LEAF_RY}
           width={LEAF_RX * 2}
           height={LEAF_RY * 2}
           rx="8"
-          fill={isOutcome ? "#eef2ff" : "white"}
-          stroke={isOutcome ? "#6366f1" : "#d1d5db"}
-          strokeWidth={isOutcome ? 2.5 : 1.5}
+          fill={fillColor}
+          stroke={strokeColor}
+          strokeWidth={strokeW}
         />
-        {/* Player A payoff */}
-        <text
-          x={layout.x - 9}
-          y={layout.y + 4}
-          textAnchor="middle"
-          className="text-[12px] font-bold font-mono"
-          fill="#2563eb"
-        >
-          {leaf.payoffs.a}
-        </text>
-        {/* Comma */}
-        <text
-          x={layout.x}
-          y={layout.y + 4}
-          textAnchor="middle"
-          className="text-[12px]"
-          fill="#9ca3af"
-        >
-          ,
-        </text>
-        {/* Player B payoff */}
-        <text
-          x={layout.x + 11}
-          y={layout.y + 4}
-          textAnchor="middle"
-          className="text-[12px] font-bold font-mono"
-          fill="#dc2626"
-        >
-          {leaf.payoffs.b}
-        </text>
+        {hasPayoffs && displayPayoffs ? (
+          <>
+            <text
+              x={layout.x - 9}
+              y={layout.y + 4}
+              textAnchor="middle"
+              className="text-[12px] font-bold font-mono"
+              fill="#2563eb"
+            >
+              {displayPayoffs.a}
+            </text>
+            <text
+              x={layout.x}
+              y={layout.y + 4}
+              textAnchor="middle"
+              className="text-[12px]"
+              fill="#9ca3af"
+            >
+              ,
+            </text>
+            <text
+              x={layout.x + 11}
+              y={layout.y + 4}
+              textAnchor="middle"
+              className="text-[12px] font-bold font-mono"
+              fill="#dc2626"
+            >
+              {displayPayoffs.b}
+            </text>
+          </>
+        ) : (
+          <text
+            x={layout.x}
+            y={layout.y + 4}
+            textAnchor="middle"
+            className="text-[11px]"
+            fill="#9ca3af"
+          >
+            ?
+          </text>
+        )}
       </g>
     );
   } else {
     const dNode = layout.node as DecisionNode;
     const isPlayerA = dNode.player === "A";
 
-    // Decision node: circle with player label
     elements.push(
       <g key={`node-${layout.x}-${layout.y}`}>
         <circle
@@ -285,9 +514,8 @@ function renderNodes(
     );
   }
 
-  // Recurse into children
   for (const { child } of layout.children) {
-    elements.push(...renderNodes(child, showSolution, game));
+    elements.push(...renderNodes(child, showSolution, game, leafPayoffs, selectedLeaf, setSelectedLeaf));
   }
 
   return elements;

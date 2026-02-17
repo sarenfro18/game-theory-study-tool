@@ -151,6 +151,7 @@ export type GameAction =
   | { type: "TOGGLE_ELIMINATE_COL"; col: number }
   | { type: "TOGGLE_CIRCLE_PAYOFF"; coord: CellCoord; player: PlayerLabel }
   | { type: "RESET_MARKINGS" }
+  | { type: "SET_FIRST_MOVER"; player: PlayerLabel }
   | { type: "TOGGLE_TREE_EDGE"; parentId: string; edgeLabel: string }
   | { type: "ASSIGN_LEAF_PAYOFF"; leafId: string; payoffs: Payoffs }
   | { type: "CLEAR_LEAF_PAYOFF"; leafId: string }

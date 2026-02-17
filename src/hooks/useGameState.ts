@@ -188,6 +188,16 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case "SET_FIRST_MOVER": {
+      if (state.difficulty !== "hard") return state;
+      const newSeqGame = buildSequentialGame(state.matrix, action.player);
+      return {
+        ...state,
+        sequentialGame: newSeqGame,
+        treeState: createFreshTreeState(),
+      };
+    }
+
     case "TOGGLE_TREE_EDGE": {
       const existing = state.treeState.highlightedEdges.findIndex(
         (e) => e.parentId === action.parentId && e.edgeLabel === action.edgeLabel
@@ -276,6 +286,10 @@ export function useGameState() {
     () => dispatch({ type: "RESET_MARKINGS" }),
     []
   );
+  const setFirstMover = useCallback(
+    (player: PlayerLabel) => dispatch({ type: "SET_FIRST_MOVER", player }),
+    []
+  );
   const toggleTreeEdge = useCallback(
     (parentId: string, edgeLabel: string) =>
       dispatch({ type: "TOGGLE_TREE_EDGE", parentId, edgeLabel }),
@@ -306,6 +320,7 @@ export function useGameState() {
     toggleCol,
     toggleCircle,
     resetMarkings,
+    setFirstMover,
     toggleTreeEdge,
     assignLeafPayoff,
     clearLeafPayoff,

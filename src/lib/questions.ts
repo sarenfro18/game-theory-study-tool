@@ -27,7 +27,10 @@ const MEDIUM_CATEGORIES: QuestionCategory[] = [
 ];
 
 const HARD_CATEGORIES: QuestionCategory[] = [
+  // Weighted toward outcome questions (commonly tested on exams)
   "sequential_first_mover",
+  "sequential_first_mover",
+  "sequential_second_mover",
   "sequential_second_mover",
   "sequential_best_response",
   "consulting_offer",

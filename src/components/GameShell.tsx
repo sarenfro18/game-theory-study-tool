@@ -86,9 +86,45 @@ export function GameShell() {
         </div>
 
         {isHardMode ? (
-          /* Hard mode: matrix + tree side-by-side, question below */
+          /* Hard mode: question full-width top, matrix + tree side-by-side, feedback full-width bottom */
           <div className="flex flex-col gap-6">
-            {/* Top row: Matrix + Decision Tree side-by-side */}
+            {/* Top: Question spanning full width */}
+            <div className="flex flex-col gap-3">
+              {/* Category badge */}
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                  {categoryLabel}
+                </span>
+                <span className="text-xs text-gray-400">
+                  Question {state.score.total + (state.isSubmitted ? 0 : 1)}
+                </span>
+              </div>
+
+              <QuestionPanel
+                question={state.question}
+                selectedAnswer={state.selectedAnswer}
+                selectedAnswers={state.selectedAnswers}
+                isSubmitted={state.isSubmitted}
+                isCorrect={state.isCorrect}
+                onSelectAnswer={selectAnswer}
+                onToggleAnswer={toggleAnswer}
+                onSubmit={submitAnswer}
+              />
+            </div>
+
+            {/* Feedback spanning full width, below question, above matrix */}
+            {state.isSubmitted && state.isCorrect !== null && (
+              <FeedbackPanel
+                isCorrect={state.isCorrect}
+                explanation={state.question.explanation}
+                correctAnswer={
+                  state.question.options[state.question.correctIndex]
+                }
+                onNewGame={newGame}
+              />
+            )}
+
+            {/* Bottom: Matrix + Decision Tree side-by-side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4 text-center">
@@ -116,43 +152,6 @@ export function GameShell() {
                   onClearLeaf={clearLeafPayoff}
                   onResetTree={resetTree}
                   onSetFirstMover={setFirstMover}
-                />
-              )}
-            </div>
-
-            {/* Bottom: Question + Feedback */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              <div className="flex flex-col gap-4">
-                {/* Category badge */}
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
-                    {categoryLabel}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    Question {state.score.total + (state.isSubmitted ? 0 : 1)}
-                  </span>
-                </div>
-
-                <QuestionPanel
-                  question={state.question}
-                  selectedAnswer={state.selectedAnswer}
-                  selectedAnswers={state.selectedAnswers}
-                  isSubmitted={state.isSubmitted}
-                  isCorrect={state.isCorrect}
-                  onSelectAnswer={selectAnswer}
-                  onToggleAnswer={toggleAnswer}
-                  onSubmit={submitAnswer}
-                />
-              </div>
-
-              {state.isSubmitted && state.isCorrect !== null && (
-                <FeedbackPanel
-                  isCorrect={state.isCorrect}
-                  explanation={state.question.explanation}
-                  correctAnswer={
-                    state.question.options[state.question.correctIndex]
-                  }
-                  onNewGame={newGame}
                 />
               )}
             </div>

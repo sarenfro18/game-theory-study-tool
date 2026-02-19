@@ -354,7 +354,35 @@ function renderEdgesH(
     // Edge label (strategy name) — positioned along the edge
     const midX = (x1 + x2) / 2;
     const midY = (y1 + y2) / 2;
-    const offsetY = child.y > layout.y ? -10 : child.y < layout.y ? 10 : -10;
+
+    // For depth-0 edges (Player 1), offset away from the line direction.
+    // For depth>=1 edges (Player 2+), always place the label ABOVE the line
+    // (perpendicular offset) to prevent overlap between sibling edge labels.
+    let labelX = midX;
+    let labelY = midY;
+    let labelAnchor: "middle" | "start" | "end" = "middle";
+
+    if (depth === 0) {
+      // Player 1 edge: horizontal or near-horizontal, offset vertically
+      const offsetY = child.y > layout.y ? -10 : child.y < layout.y ? 10 : -10;
+      labelY = midY + offsetY;
+    } else {
+      // Player 2+ edge: diagonal line — compute perpendicular offset so label
+      // always sits above (to the upper side of) the line.
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      // Perpendicular unit vector (rotated 90° counter-clockwise = (-dy, dx))
+      // "Above" the line means in the direction of (-dy, dx) normalised
+      const perpX = -dy / len;
+      const perpY = dx / len;
+      // Use perpX/perpY so the label is always on the same side (above) the line
+      const offset = 14;
+      labelX = midX + perpX * offset;
+      labelY = midY + perpY * offset;
+      // Anchor based on which side the label ends up
+      labelAnchor = perpX > 0.2 ? "start" : perpX < -0.2 ? "end" : "middle";
+    }
 
     elements.push(
       <g
@@ -363,8 +391,8 @@ function renderEdgesH(
         onClick={() => onToggleEdge(parentId, edge.label)}
       >
         <rect
-          x={midX - 20}
-          y={midY + offsetY - 9}
+          x={labelX - 20}
+          y={labelY - 9}
           width="40"
           height="18"
           rx="4"
@@ -373,8 +401,8 @@ function renderEdgesH(
           strokeWidth="1"
         />
         <text
-          x={midX}
-          y={midY + offsetY + 3}
+          x={labelX}
+          y={labelY + 3}
           textAnchor="middle"
           className="text-[11px] font-medium"
           fill={onPath ? "#4f46e5" : highlighted ? "#059669" : "#6b7280"}
